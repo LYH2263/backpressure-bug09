@@ -64,8 +64,18 @@ func (l *Logger) Rotate(newPath string) error {
 	if err != nil {
 		return err
 	}
-	// leak old handle
+	// Swap to the new handle first so logging keeps flowing to the new
+	// path even if closing the old handle fails, then close the previous
+	// handle. On Windows an unclosed handle keeps a sharing lock on the
+	// rotated file; until it is closed the nightly cleanup cannot delete
+	// the old log (DeleteFile fails with ERROR_SHARING_VIOLATION). The
+	// old code dropped this handle on the floor, which is exactly what
+	// held the old path open for hours after rotation.
+	old := l.f
 	l.f = f
 	l.path = newPath
+	if old != nil {
+		return old.Close()
+	}
 	return nil
 }
